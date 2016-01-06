@@ -1,1 +1,126 @@
 <?php
+
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Menu\MenuLinkInterface;
+use Drupal\Core\Menu\MenuLinkContent;
+use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter() for menu_link_content_form.
+ * Allow adding custom attributes to menu items' <li>, e.g. class
+ *
+ * This function based on the tutorial found here: http://www.agoradesign.at/blog/add-custom-menu-item-attributes-drupal-8
+ */
+function uber_base_form_menu_link_content_form_alter(array &$form, FormStateInterface $form_state, $form_id) {
+  $menuLink = _uber_base_get_menu_link_entity_from_form_state($form_state);
+  $linkOptions = $menuLink->link->first()->options;
+  $linkAttributes = !empty($linkOptions['attributes']) ? $linkOptions['attributes'] : array();
+
+  // Add attributes to the menu item.
+  $form['options']['attributes'] = array(
+    '#type' => 'details',
+    '#title' => t('Menu item attributes'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+    '#tree' => TRUE,
+  );
+
+  $form['options']['attributes']['class'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Classes'),
+    '#description' => t('Enter additional classes to be added to the menu item.'),
+    '#default_value' => !empty($linkAttributes['class']) ? implode(' ', $linkAttributes['class']) : '',
+  );
+
+  $form['actions']['submit']['#submit'][] = 'uber_base_form_menu_link_content_form_submit';
+}
+
+/**
+ * Additional submit handler for menu_link_content_form.
+ * Allow adding custom attributes to menu items' <li>, e.g. class
+ *
+ * This function based on the tutorial found here: http://www.agoradesign.at/blog/add-custom-menu-item-attributes-drupal-8
+ */
+function uber_base_form_menu_link_content_form_submit(array &$form, FormStateInterface $form_state) {
+  $values = $form_state->getValues();
+  $attributes = array();
+
+  foreach ($values['attributes'] as $attribute => $value) {
+    $value = trim($value);
+    if (!empty($value)) {
+      if ($attribute == 'class') {
+        $value = explode(' ', $value);
+      }
+      $attributes[$attribute] = $value;
+    }
+  }
+
+  $menuLinkEntity = _uber_base_get_menu_link_entity_from_form_state($form_state);
+  $options = $menuLinkEntity->link->first()->options;
+  $changed = FALSE;
+  if (empty($attributes)) {
+    if (!empty($options['attributes'])) {
+      unset($options['attributes']);
+      $changed = TRUE;
+    }
+  }
+  else {
+    $options['attributes'] = $attributes;
+    $changed = TRUE;
+  }
+
+  if ($changed) {
+    $menuLinkEntity->link->first()->options = $options;
+    $menuLinkEntity->save();
+  }
+}
+
+/**
+ * Implements hook_preprocess_menu().
+ * 
+ * Workaround for randomly lost menu item options: load link entities and
+ * restore lost link attributes.
+ */
+function uber_base_preprocess_menu(&$variables) {
+  foreach ($variables['items'] as &$item) {
+    $menuLinkEntity = uber_base_load_link_entity_by_link($item['original_link']);
+    if (!empty($menuLinkEntity)) {
+      if (!empty($menuLinkEntity->link->first()->options['attributes'])) {
+        foreach ($menuLinkEntity->link->first()->options['attributes'] as $attribute => $value) {
+          if ($attribute == 'class') {
+            foreach ($value as $cssClass) {
+              if (!$item['attributes']->hasClass($cssClass)) {
+                $item['attributes']->addClass($cssClass);
+              }
+            }
+          }
+          else {
+            $item['attributes']->setAttribute($attribute, $value);
+          }
+        }
+      }
+    }
+  }
+}
+
+function uber_base_load_link_entity_by_link(MenuLinkInterface $menuLinkContentPlugin) {
+  $entity = NULL;
+  if ($menuLinkContentPlugin instanceof MenuLinkContent) {
+    list($entity_type, $uuid) = explode(':', $menuLinkContentPlugin->getPluginId(), 2);
+    $entity = \Drupal::entityManager()->loadEntityByUuid($entity_type, $uuid);
+  }
+  return $entity;
+}
+
+/**
+ * Small helper function to
+ * Allow adding custom attributes to menu items' <li>, e.g. class
+ *
+ * This function based on the tutorial found here: http://www.agoradesign.at/blog/add-custom-menu-item-attributes-drupal-8
+ */
+
+function _uber_base_get_menu_link_entity_from_form_state(FormStateInterface $form_state) {
+  $buildInfo = $form_state->getBuildInfo();
+  $menuLinkContentForm = $buildInfo['callback_object'];
+  return $menuLinkContentForm->getEntity();
+}
