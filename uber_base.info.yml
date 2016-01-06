@@ -1,0 +1,6 @@
+name: 'über Base'
+type: module
+description: 'Start here with an über custom site installation. Brings back some of the legacy configurations we all miss.'
+package: über
+version: VERSION
+core: 8.x

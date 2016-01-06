@@ -1,0 +1,7 @@
+uber_base.content:
+  path: '/uber' 
+  defaults: 
+    _controller: '\Drupal\uber_base\Controller\UberBaseController::content' 
+    _title: 'Hello World'
+  requirements: 
+    _permission: 'access content'
